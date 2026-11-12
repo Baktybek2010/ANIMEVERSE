@@ -16,23 +16,23 @@ export function SearchBox() {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
-  const [results, setResults] = useState<AnimeCardData[]>([]);
-  const [state, setState] = useState<"idle" | "loading" | "done" | "error">("idle");
+  // Результат хранится вместе с запросом, для которого получен: устаревшие ответы не показываются.
+  const [result, setResult] = useState<{ query: string; items: AnimeCardData[]; failed: boolean }>({ query: "", items: [], failed: false });
   const inputRef = useRef<HTMLInputElement>(null);
   const rootRef = useRef<HTMLDivElement>(null);
   const listId = useId();
 
   const normalized = normalizeQuery(query);
 
+  const ready = normalized.length >= 2 && result.query === normalized;
+  const results = ready && !result.failed ? result.items : [];
+  const state: "idle" | "loading" | "done" | "error" =
+    normalized.length < 2 ? "idle" : !ready ? "loading" : result.failed ? "error" : "done";
+
   // Подсказки с задержкой ввода и отменой устаревших запросов.
   useEffect(() => {
-    if (normalized.length < 2) {
-      setResults([]);
-      setState("idle");
-      return;
-    }
+    if (normalized.length < 2) return;
     const controller = new AbortController();
-    setState("loading");
     const timer = window.setTimeout(async () => {
       try {
         const response = await fetch(`/api/search?q=${encodeURIComponent(normalized)}&lang=${locale}`, {
@@ -40,10 +40,9 @@ export function SearchBox() {
         });
         if (!response.ok) throw new Error(String(response.status));
         const payload = (await response.json()) as { items: AnimeCardData[] };
-        setResults(payload.items);
-        setState("done");
+        setResult({ query: normalized, items: payload.items, failed: false });
       } catch (error) {
-        if ((error as Error).name !== "AbortError") setState("error");
+        if ((error as Error).name !== "AbortError") setResult({ query: normalized, items: [], failed: true });
       }
     }, 250);
     return () => {

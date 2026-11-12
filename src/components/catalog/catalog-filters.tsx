@@ -2,7 +2,7 @@
 
 import { Search, SlidersHorizontal, X } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useEffect, useRef, useState, useTransition } from "react";
+import { useEffect, useState, useTransition } from "react";
 import { localizePath } from "@/i18n/config";
 import { useI18n } from "@/i18n/client";
 import { plural } from "@/i18n/format";
@@ -23,8 +23,13 @@ export function CatalogFiltersPanel({ filters, genres, years }: Props) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [query, setQuery] = useState(filters.q);
+  const [syncedQuery, setSyncedQuery] = useState(filters.q);
   const [expanded, setExpanded] = useState(false);
-  const lastApplied = useRef(filters.q);
+  // Адресная строка изменилась извне (кнопки «назад/вперёд», сброс) — обновляем поле.
+  if (syncedQuery !== filters.q) {
+    setSyncedQuery(filters.q);
+    setQuery(filters.q);
+  }
   const activeCount = countActiveFilters(filters);
 
   const navigate = (next: Partial<CatalogFilters>) => {
@@ -42,21 +47,12 @@ export function CatalogFiltersPanel({ filters, genres, years }: Props) {
   // Поиск применяется с небольшой задержкой после ввода.
   useEffect(() => {
     const normalized = normalizeQuery(query);
-    if (normalized === lastApplied.current) return;
-    const timer = window.setTimeout(() => {
-      lastApplied.current = normalized;
-      navigate({ q: normalized });
-    }, 350);
+    if (normalized === filters.q) return;
+    const timer = window.setTimeout(() => navigate({ q: normalized }), 350);
     return () => window.clearTimeout(timer);
     // navigate зависит от текущих filters; пересоздавать таймер при их смене не нужно.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [query]);
-
-  // Синхронизация поля с адресной строкой (кнопки «назад/вперёд», сброс).
-  useEffect(() => {
-    lastApplied.current = filters.q;
-    setQuery(filters.q);
-  }, [filters.q]);
+  }, [query, filters.q]);
 
   const toggleGenre = (slug: string) => {
     const set = new Set(filters.genres);
@@ -67,7 +63,6 @@ export function CatalogFiltersPanel({ filters, genres, years }: Props) {
 
   const reset = () => {
     setQuery("");
-    lastApplied.current = "";
     startTransition(() => router.push(localizePath(locale, "/catalog"), { scroll: false }));
   };
 

@@ -50,6 +50,23 @@ const SAVE_INTERVAL_MS = 10_000;
 const AUTOPLAY_COUNTDOWN = 8;
 const VIEW_AFTER_SECONDS = 20;
 
+type SavedSettings = { volume?: number; muted?: boolean; rate?: number };
+
+/** Настройки плеера из localStorage (громкость, скорость). */
+function readSavedSettings(): SavedSettings {
+  if (typeof window === "undefined") return {};
+  try {
+    const saved = JSON.parse(window.localStorage.getItem("av-player") ?? "{}") as SavedSettings;
+    return {
+      volume: typeof saved.volume === "number" ? clamp(saved.volume, 0, 1) : undefined,
+      muted: typeof saved.muted === "boolean" ? saved.muted : undefined,
+      rate: typeof saved.rate === "number" && SPEEDS.includes(saved.rate) ? saved.rate : undefined,
+    };
+  } catch {
+    return {}; // Повреждённые настройки игнорируются.
+  }
+}
+
 function languageName(code: string, locale: string): string {
   try {
     const name = new Intl.DisplayNames([locale], { type: "language" }).of(code);
@@ -80,7 +97,7 @@ export function VideoPlayer({ episodeId, title, poster, sources, subtitles, star
   const [buffered, setBuffered] = useState(0);
   const [volume, setVolume] = useState(1);
   const [muted, setMuted] = useState(false);
-  const [rate, setRate] = useState(1);
+  const [rate, setRate] = useState(() => readSavedSettings().rate ?? 1);
   const [fullscreen, setFullscreen] = useState(false);
   const [controlsVisible, setControlsVisible] = useState(true);
   const [menu, setMenu] = useState<MenuView | null>(null);
@@ -314,7 +331,7 @@ export function VideoPlayer({ episodeId, title, poster, sources, subtitles, star
     const onEnded = () => {
       setPlaying(false);
       sendProgress();
-      if (nextHref && autoplayNextRef.current) setCountdown(AUTOPLAY_COUNTDOWN);
+      if (nextHref && autoplayNext) setCountdown(AUTOPLAY_COUNTDOWN);
     };
     const onError = () => {
       if (hlsRef.current) return; // ошибки HLS обрабатывает hls.js
@@ -348,12 +365,7 @@ export function VideoPlayer({ episodeId, title, poster, sources, subtitles, star
       video.removeEventListener("ended", onEnded);
       video.removeEventListener("error", onError);
     };
-  }, [nextHref, sendProgress]);
-
-  const autoplayNextRef = useRef(autoplayNext);
-  useEffect(() => {
-    autoplayNextRef.current = autoplayNext;
-  }, [autoplayNext]);
+  }, [autoplayNext, nextHref, sendProgress]);
 
   // Сохранение при сворачивании вкладки и уходе со страницы.
   useEffect(() => {
@@ -374,17 +386,10 @@ export function VideoPlayer({ episodeId, title, poster, sources, subtitles, star
   useEffect(() => {
     const video = videoRef.current;
     if (!video) return;
-    try {
-      const saved = JSON.parse(window.localStorage.getItem("av-player") ?? "{}") as { volume?: number; muted?: boolean; rate?: number };
-      if (typeof saved.volume === "number") video.volume = clamp(saved.volume, 0, 1);
-      if (typeof saved.muted === "boolean") video.muted = saved.muted;
-      if (typeof saved.rate === "number" && SPEEDS.includes(saved.rate)) {
-        video.playbackRate = saved.rate;
-        setRate(saved.rate);
-      }
-    } catch {
-      // Повреждённые настройки игнорируются.
-    }
+    const saved = readSavedSettings();
+    if (saved.volume !== undefined) video.volume = saved.volume;
+    if (saved.muted !== undefined) video.muted = saved.muted;
+    if (saved.rate !== undefined) video.playbackRate = saved.rate;
   }, []);
   useEffect(() => {
     try {
@@ -598,6 +603,13 @@ export function VideoPlayer({ episodeId, title, poster, sources, subtitles, star
     setMenu(null);
   };
 
+  const selectSpeed = (id: string) => {
+    const speed = Number(id);
+    if (videoRef.current) videoRef.current.playbackRate = speed;
+    setRate(speed);
+    setMenu(null);
+  };
+
   const label = (options: Option[], id: string) => options.find((option) => option.id === id)?.label ?? "";
   const progressPercent = duration > 0 ? (currentTime / duration) * 100 : 0;
   const bufferedPercent = duration > 0 ? (buffered / duration) * 100 : 0;
@@ -662,12 +674,7 @@ export function VideoPlayer({ episodeId, title, poster, sources, subtitles, star
         title: t.watch.speed,
         options: SPEEDS.map((speed) => ({ id: String(speed), label: speed === 1 ? t.watch.speedNormal : `${speed}×` })),
         current: String(rate),
-        select: (id) => {
-          const speed = Number(id);
-          if (videoRef.current) videoRef.current.playbackRate = speed;
-          setRate(speed);
-          setMenu(null);
-        },
+        select: selectSpeed,
       },
     };
     const section = config[view];

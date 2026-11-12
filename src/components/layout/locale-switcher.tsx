@@ -3,7 +3,8 @@
 import { Check, Globe } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useTransition } from "react";
-import { type Locale, LOCALE_COOKIE, localeNames, locales, localizePath, splitLocale } from "@/i18n/config";
+import { type Locale, localeNames, locales, localizePath, splitLocale } from "@/i18n/config";
+import { persistLocale } from "@/i18n/persist";
 import { useI18n } from "@/i18n/client";
 import { Dropdown, menuItemClass } from "@/components/ui/dropdown";
 import { saveLocaleAction } from "@/lib/actions/profile";
@@ -16,8 +17,7 @@ export function LocaleSwitcher({ className }: { className?: string }) {
 
   const switchTo = (next: Locale) => {
     if (next === locale) return;
-    // Выбор сохраняется в cookie на год — и подтверждается proxy при следующем запросе.
-    document.cookie = `${LOCALE_COOKIE}=${next}; path=/; max-age=31536000; samesite=lax`;
+    persistLocale(next);
     const { path } = splitLocale(window.location.pathname);
     const target = `${localizePath(next, path)}${window.location.search}${window.location.hash}`;
     startTransition(async () => {

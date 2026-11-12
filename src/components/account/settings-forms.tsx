@@ -4,7 +4,8 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 import { useForm } from "react-hook-form";
-import { type Locale, LOCALE_COOKIE, localeNames, locales, localizePath, splitLocale } from "@/i18n/config";
+import { type Locale, localeNames, locales, localizePath, splitLocale } from "@/i18n/config";
+import { persistLocale } from "@/i18n/persist";
 import { useI18n } from "@/i18n/client";
 import { fmt } from "@/i18n/format";
 import { applyServerErrors, fieldError } from "@/components/auth/form-utils";
@@ -57,7 +58,7 @@ export function PreferencesForm({ initial, isPremium }: { initial: Preferences; 
       }
       toast.success(t.common.saved);
       if (language !== locale) {
-        document.cookie = `${LOCALE_COOKIE}=${language}; path=/; max-age=31536000; samesite=lax`;
+        persistLocale(language);
         router.push(localizePath(language, splitLocale(window.location.pathname).path));
       } else {
         router.refresh();
