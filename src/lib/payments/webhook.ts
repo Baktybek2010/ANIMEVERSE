@@ -34,8 +34,22 @@ export function subscriptionPeriod(subscription: StripeSubscription): { start: s
 
 export type WebhookOutcome = { handled: boolean; duplicate?: boolean; note?: string };
 
-/** Создаёт или обновляет подписку пользователя по данным Stripe. */
+const isLive = (status: string | null) => status === "active" || status === "trialing";
+
+/**
+ * Создаёт или обновляет подписку пользователя по данным Stripe.
+ * Уведомление об активации отправляется один раз — при переходе в действующий статус,
+ * каким бы событием он ни был вызван.
+ */
 async function upsertSubscription(db: DbClient, subscription: StripeSubscription, fallback: { userId?: string | null; planId?: string | null } = {}) {
+  const result = await writeSubscription(db, subscription, fallback);
+  if (isLive(result.status) && !isLive(result.previousStatus)) {
+    await db.from("notifications").insert({ user_id: result.userId, type: "premium_activated", link: "/account/subscription" });
+  }
+  return result;
+}
+
+async function writeSubscription(db: DbClient, subscription: StripeSubscription, fallback: { userId?: string | null; planId?: string | null } = {}) {
   const status = STATUS_MAP[subscription.status] ?? "incomplete";
   const period = subscriptionPeriod(subscription);
 
@@ -163,13 +177,10 @@ export async function handleStripeEvent(db: DbClient, stripe: StripeClient, even
         if (object.mode !== "subscription" || !subscriptionId) return { handled: false, note: "not a subscription checkout" };
         const metadata = (object.metadata ?? {}) as Record<string, string>;
         const subscription = await stripe.retrieveSubscription(subscriptionId);
-        const result = await upsertSubscription(db, subscription, {
+        await upsertSubscription(db, subscription, {
           userId: str(metadata.user_id) ?? str(object.client_reference_id),
           planId: str(metadata.plan_id),
         });
-        if (result.created && (result.status === "active" || result.status === "trialing")) {
-          await db.from("notifications").insert({ user_id: result.userId, type: "premium_activated", link: "/account/subscription" });
-        }
         return { handled: true };
       }
       case "customer.subscription.created":
@@ -177,9 +188,7 @@ export async function handleStripeEvent(db: DbClient, stripe: StripeClient, even
       case "customer.subscription.deleted": {
         const subscription = object as unknown as StripeSubscription;
         const result = await upsertSubscription(db, subscription);
-        if (result.created && (result.status === "active" || result.status === "trialing")) {
-          await db.from("notifications").insert({ user_id: result.userId, type: "premium_activated", link: "/account/subscription" });
-        } else if (!result.created && subscription.cancel_at_period_end && event.type === "customer.subscription.updated") {
+        if (!result.created && subscription.cancel_at_period_end && event.type === "customer.subscription.updated") {
           const previous = (event.data as { previous_attributes?: { cancel_at_period_end?: boolean } }).previous_attributes;
           if (previous?.cancel_at_period_end === false) {
             await db.from("notifications").insert({ user_id: result.userId, type: "premium_canceled", link: "/account/subscription" });
