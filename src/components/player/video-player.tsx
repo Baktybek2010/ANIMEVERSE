@@ -610,6 +610,17 @@ export function VideoPlayer({ episodeId, title, poster, sources, subtitles, star
     setMenu(null);
   };
 
+  /** Выбор пункта в подменю настроек (обработчик события — здесь можно обращаться к ref). */
+  const handleSelect = (view: Exclude<MenuView, "root">, id: string) => {
+    if (view === "quality") selectQuality(id);
+    else if (view === "audio") selectAudio(id);
+    else if (view === "speed") selectSpeed(id);
+    else {
+      setSubtitleId(id);
+      setMenu(null);
+    }
+  };
+
   const label = (options: Option[], id: string) => options.find((option) => option.id === id)?.label ?? "";
   const progressPercent = duration > 0 ? (currentTime / duration) * 100 : 0;
   const bufferedPercent = duration > 0 ? (buffered / duration) * 100 : 0;
@@ -658,23 +669,14 @@ export function VideoPlayer({ episodeId, title, poster, sources, subtitles, star
       );
     }
 
-    const config: Record<Exclude<MenuView, "root">, { title: string; options: Option[]; current: string; select: (id: string) => void }> = {
-      quality: { title: t.watch.quality, options: qualityOptions, current: currentQualityId, select: selectQuality },
-      audio: { title: t.watch.audio, options: audioOptions, current: currentAudioId, select: selectAudio },
-      subtitles: {
-        title: t.watch.subtitles,
-        options: subtitleOptions,
-        current: subtitleId,
-        select: (id) => {
-          setSubtitleId(id);
-          setMenu(null);
-        },
-      },
+    const config: Record<Exclude<MenuView, "root">, { title: string; options: Option[]; current: string }> = {
+      quality: { title: t.watch.quality, options: qualityOptions, current: currentQualityId },
+      audio: { title: t.watch.audio, options: audioOptions, current: currentAudioId },
+      subtitles: { title: t.watch.subtitles, options: subtitleOptions, current: subtitleId },
       speed: {
         title: t.watch.speed,
         options: SPEEDS.map((speed) => ({ id: String(speed), label: speed === 1 ? t.watch.speedNormal : `${speed}×` })),
         current: String(rate),
-        select: selectSpeed,
       },
     };
     const section = config[view];
@@ -690,7 +692,7 @@ export function VideoPlayer({ episodeId, title, poster, sources, subtitles, star
             type="button"
             role="menuitemradio"
             aria-checked={option.id === section.current}
-            onClick={() => section.select(option.id)}
+            onClick={() => handleSelect(view, option.id)}
             className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm hover:bg-white/10"
           >
             <Check className={cn("size-4", option.id === section.current ? "text-brand-soft" : "invisible")} aria-hidden />

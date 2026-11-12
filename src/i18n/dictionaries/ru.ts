@@ -1,3 +1,5 @@
+import type { PluralForms } from "../format";
+
 const ru = {
   common: {
     appName: "ANIMEVERSE",
@@ -532,4 +534,11 @@ const ru = {
 };
 
 export default ru;
-export type Dictionary = typeof ru;
+/** Формы множественного числа различаются по языкам, поэтому в типе словаря few/many необязательны. */
+type Loosen<T> = T extends { one: string; other: string }
+  ? PluralForms
+  : T extends string
+    ? string
+    : { [K in keyof T]: Loosen<T[K]> };
+
+export type Dictionary = Loosen<typeof ru>;

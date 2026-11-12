@@ -15,7 +15,7 @@ import { fmt, formatCompact, formatDate, plural } from "@/i18n/format";
 import { getI18n } from "@/i18n/server";
 import { getCurrentUser } from "@/lib/auth/session";
 import { getAnimeBySlug, getSimilarAnime } from "@/lib/data/catalog";
-import { getAnimeProgress, getLibraryState } from "@/lib/data/library";
+import { type EpisodeProgress, getAnimeProgress, getLibraryState } from "@/lib/data/library";
 import { descriptionToParagraphs } from "@/lib/data/localize";
 import type { AnimeDetail } from "@/lib/data/types";
 import { absoluteUrl, jsonLd, pageMetadata } from "@/lib/seo";
@@ -41,9 +41,8 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 /** Пользовательские кнопки: главная CTA учитывает прогресс, списки — текущее состояние. */
 async function UserActions({ anime, t }: { anime: AnimeDetail; t: Dictionary }) {
   const user = await getCurrentUser();
-  const [state, progress] = user
-    ? await Promise.all([getLibraryState(anime.id), getAnimeProgress(anime.id)])
-    : [{ isFavorite: false, inWatchlist: false }, {}];
+  const state = user ? await getLibraryState(anime.id) : { isFavorite: false, inWatchlist: false };
+  const progress: Record<string, EpisodeProgress> = user ? await getAnimeProgress(anime.id) : {};
 
   const episodes = anime.seasons.flatMap((season) => season.episodes.map((episode) => ({ season: season.number, episode })));
   // Продолжаем с последней недосмотренной серии, иначе — со следующей после последней просмотренной.
